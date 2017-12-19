@@ -4,71 +4,6 @@ from time import time
 from uuid import uuid4
 from flask import Flask, jsonify, request
 
-#Instantiate our Node
-app = Flask(__name__)
-
-#Generate a globally unique address for our node
-#uuid4 generates a random ID, each uuid has a different method of generating addresses
-node_identifier = str(uuid4()).replace('-', '')
-
-blockchain = Blockchain()
-
-#The following are the methods associated with the Flask
-@app.route('/mine', methods = ['GET'])
-def mine():
-    #We must run the proof of work algorithm to get the next proof
-    last_block = blockchain.last_block
-    last_proof = last_block['proof']
-    proof = blockchain.proof_of_work(last_proof)
-
-    #We must receive some reward for finding the proof
-    #The sender will be identified as 0 because we are mining an entirely new coin
-    blockchain.new_transaction(
-        sender = 0,
-        recepient = node_identifier,
-        amount = 1,
-    )
-
-    #Create the new block and add it to the chain
-    previous_hash = blockchain.hash(last_block)
-    block = blockchain.new_block(proof, previous_hash)
-    response = {
-        'message': "New Block added to chain",
-        'index': block['index'],
-        'transactions': block['transactions'],
-        'proof': block['proof'],
-        'previous hash': block['previous_hash'],
-    }
-    return jsonify(response), 200
-
-@app.route('/transactions/new', methods = ['POST'])
-def new_transactions():
-    #parses values from request and stores in request
-    values = request.get_json()
-
-    #Checks to see whether the values contain all required for transaction
-    required = ['sender', 'recipient', 'amount']
-    if not all(k in values for k in required)
-        return 'Missing values', 400
-
-    #Adds a new transaction to our list of transactions in blockchain, new_transaction() returns an index
-    index = blockchain.new_transaction(values['sender'], values['recipient'], values['amount'])
-    response = {'message': f'Transaction will be added to the Block {index}'}
-    return jsonify(response), 201
-
-@app.route('/chain', methods = ['GET'])
-def full_chain():
-    response = {
-        'chain': blockchain.chain,
-        'length': len(blockchain.chain),
-    }
-
-    #JSONify converts from HTML to JSON
-    return jsonify(response), 200
-
-if __name__ == '__main__':
-    #runs the server on port 5000
-    app.run(host = '0.0.0.0', port = 5000)
 class Blockchain(object):
 
     def __init__(self):
@@ -90,6 +25,7 @@ class Blockchain(object):
         block = {
             'index': len(self.chain) + 1,
             'timestamp': time(),
+            'transactions': self.current_transactions,
             'proof': proof,
             'previous_hash': previous_hash or self.hash(self.chain[-1]),
         }
@@ -151,7 +87,7 @@ class Blockchain(object):
         '''
         #We iterate until we find a value for proof that statisfies the algorithm.
         proof = 0
-        while self.valid_proof(last_proof, proof) is False
+        while self.valid_proof(last_proof, proof) is False:
             proof += 1
 
         return proof
@@ -169,5 +105,69 @@ class Blockchain(object):
         guess = f'{last_proof}{proof}'.encode()
         guess_hash = hashlib.sha256(guess).hexdigest()
         return guess_hash[:4] == '0000'
+#Instantiate our Node
+app = Flask(__name__)
 
+#Generate a globally unique address for our node
+#uuid4 generates a random ID, each uuid has a different method of generating addresses
+node_identifier = str(uuid4()).replace('-', '')
+
+blockchain = Blockchain()
+
+#The following are the methods associated with the Flask
+@app.route('/mine', methods = ['GET'])
+def mine():
+    #We must run the proof of work algorithm to get the next proof
+    last_block = blockchain.last_block
+    last_proof = last_block['proof']
+    proof = blockchain.proof_of_work(last_proof)
+
+    #We must receive some reward for finding the proof
+    #The sender will be identified as 0 because we are mining an entirely new coin
+    blockchain.new_transaction(
+        sender = 0,
+        recepient = node_identifier,
+        amount = 1,
+    )
+
+    #Create the new block and add it to the chain
+    previous_hash = blockchain.hash(last_block)
+    block = blockchain.new_block(proof, previous_hash)
+    response = {
+        'message': "New Block added to chain",
+        'index': block['index'],
+        'transactions': block['transactions'],
+        'proof': block['proof'],
+        'previous hash': block['previous_hash'],
+    }
+    return jsonify(response), 200
+
+@app.route('/transactions/new', methods = ['POST'])
+def new_transactions():
+    #parses values from request and stores in request
+    values = request.get_json()
+
+    #Checks to see whether the values contain all required for transaction
+    required = ['sender', 'recipient', 'amount']
+    if not all(k in values for k in required):
+        return 'Missing values', 400
+
+    #Adds a new transaction to our list of transactions in blockchain, new_transaction() returns an index
+    index = blockchain.new_transaction(values['sender'], values['recipient'], values['amount'])
+    response = {'message': f'Transaction will be added to Block {index}'}
+    return jsonify(response), 201
+
+@app.route('/chain', methods = ['GET'])
+def full_chain():
+    response = {
+        'chain': blockchain.chain,
+        'length': len(blockchain.chain),
+    }
+
+    #JSONify converts from HTML to JSON
+    return jsonify(response), 200
+
+if __name__ == '__main__':
+    #runs the server on port 5000
+    app.run(host = '0.0.0.0', port = 5000)
 
