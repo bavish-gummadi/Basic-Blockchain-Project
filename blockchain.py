@@ -3,6 +3,8 @@ import json
 from time import time
 from uuid import uuid4
 from flask import Flask, jsonify, request
+from urllib.parse import urlparse
+import requests
 
 class Blockchain(object):
 
@@ -12,6 +14,20 @@ class Blockchain(object):
 
         #Creation of the genesis block
         self.new_block(previous_hash = 1, proof = 100)
+
+        #Utilize set for nodes to ensure there are no duplicate nodes
+        self.nodes = set()
+
+    def register_node(self, address):
+        '''
+        Adds a new node to our list of nodes
+        :param address: <str> the address of the new node. Ex: 'http://192.168.0.5:5000'
+        :return: None
+        '''
+
+        parsed_url = urlparse(address)
+        self.nodes.add(parsed_url.netloc)
+
 
     #enters a new block into the Blockchain
     def new_block(self, proof, previous_hash = None):
@@ -105,6 +121,69 @@ class Blockchain(object):
         guess = f'{last_proof}{proof}'.encode()
         guess_hash = hashlib.sha256(guess).hexdigest()
         return guess_hash[:4] == '0000'
+
+    def valid_chain(self, chain):
+        '''
+        This will determine if a given blockchain is valid
+        :param chain: <list> The blockchain we are checking
+        :return: <bool> True if the blockchain is valid, false if not
+        '''
+
+        last_block = chain[0]
+        index = 1
+
+        while index < len(chain):
+            block = chain[index]
+            print(f'{last_block}')
+            print(f'{block}')
+            print("\n-----------\n")
+            #check if the hash of the last block matches
+            if block['previous_hash'] != self.hash(last_block):
+                return False
+
+            #verify that the proof of work matches as well
+            if not self.valid_proof(last_block['proof'], block['proof']):
+                return False
+
+            #Incrementations
+            last_block = block
+            index += 1
+
+        return True
+
+    def resolve_conflicts(self):
+        '''
+        This is the conflict resolution algorithm and it will be quite simple for the purposes of this program
+        This will resolve conflicts by replacing our chain with the longest chain in the network
+        :return: <bool> return True if the chain was replaces, False if not
+        '''
+
+        neighbors = self.nodes
+        new_chain = None
+
+        #max_length initially set to the current length of the chain to ensure that the chain we find is always longer
+        max_length = len(self.chain)
+
+        #find and verify all the chains from the nodes in our network
+        for node in neighbors:
+            #gets the chain of the current node in neighbors
+            response = requests.get(f'http//{node}/chain')
+
+            if response.status_code == 200:
+                length = response.json()['length']
+                chain = response.json()['chain']
+
+                #Now we want to verify the chain and see if it has a higher length than our max_length
+                if length > max_length and self.valid_chain():
+                    max_length = length
+                    new_chain = chain
+
+        #Replace our chain with a new, longer, and valid chain, if we found one
+        if new_chain:
+            self.chain = new_chain
+            return True
+        return False
+
 #Instantiate our Node
 app = Flask(__name__)
 
