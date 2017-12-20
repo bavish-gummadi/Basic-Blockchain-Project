@@ -246,6 +246,49 @@ def full_chain():
     #JSONify converts from HTML to JSON
     return jsonify(response), 200
 
+@app.route('/nodes/register', methods=['POST'])
+def register_nodes():
+    '''
+    Gets and registers the nodes from the request
+    :return: 'New nodes have been added' and the list of nodes, or an Error if there are no nodes in the list
+    '''
+    values = request.get_json()
+    nodes = values.get('nodes')
+
+    if nodes is None:
+        return "Error: Please enter a valid list of nodes", 400
+
+    #Registers the nodes
+    for node in nodes:
+        blockchain.register_node(node)
+
+    response = {
+        'message': "New nodes have been added",
+        'total_nodes': list(blockchain.nodes),
+    }
+
+    return jsonify(response), 201
+
+@app.route('/nodes/resolve', methods = ['GET'])
+def consensus():
+    '''
+    Finds the consensus. In other words, this will find the longest, valid chain in the network.
+    :return: 'Our chain was replaced' if there exists a longer and valid chain, or 'Our chain is authoritative' if
+    there is no longer and valid chain.
+    '''
+    replaced = blockchain.resolve_conflicts()
+    if replaced:
+        response = {
+            'message': 'Our chain was replaced',
+            'chain': blockchain.chain,
+        }
+    else:
+        response = {
+            'message': 'Our chain is authoritative',
+            'chain': blockchain.chain,
+        }
+    return jsonify(response), 200
+
 if __name__ == '__main__':
     #runs the server on port 5000
     app.run(host = '0.0.0.0', port = 5000)
